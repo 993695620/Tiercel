@@ -13,7 +13,7 @@
   - [具体表现](#具体表现)
     - [下载过程中](#下载过程中)
     - [下载完成](#下载完成)
-    - [下载错误](下载错误)
+    - [下载错误](#下载错误)
   - [重定向](#重定向)
   - [前后台切换](#前后台切换)
   - [注意事项](#注意事项)
@@ -126,7 +126,7 @@ NSURLSessionDownloadURL
 NSURLSessionResumeBytesReceived
 // currentRequest
 NSURLSessionResumeCurrentRequest
-// tag
+// Etag，下载文件的唯一标识
 NSURLSessionResumeEntityTag
 // 已经下载的缓存文件路径
 NSURLSessionResumeInfoLocalPath
@@ -232,15 +232,13 @@ NSURLSessionResumeServerDownloadDate
 //
 //   - identifier: 对应Background Sessions的identifier
 //   - completionHandler: 需要保存起来
-func urlSessionDidFinishEvents(forBackgroundURLSession session: URLSession) {
-    DispatchQueue.main.async {
-        guard let appDelegate = UIApplication.shared.delegate as? AppDelegate,
-            let backgroundCompletionHandler = appDelegate.backgroundCompletionHandler else {
-                return
-        }
-        // 上面保存的completionHandler
-        backgroundCompletionHandler()
-    }
+func application(_ application: UIApplication,
+                 handleEventsForBackgroundURLSession identifier: String,
+                 completionHandler: @escaping () -> Void) {
+    	if identifier == urlSession.configuration.identifier ?? "" {
+            // 这里用作为AppDelegate的属性，保存completionHandler
+            backgroundCompletionHandler = completionHandler
+	    }
 }
 ```
 
@@ -249,13 +247,11 @@ func urlSessionDidFinishEvents(forBackgroundURLSession session: URLSession) {
 ```swift
 // 必须实现这个方法，并且在主线程调用completionHandler
 func urlSessionDidFinishEvents(forBackgroundURLSession session: URLSession) {
+    guard let appDelegate = UIApplication.shared.delegate as? AppDelegate,
+        let backgroundCompletionHandler = appDelegate.backgroundCompletionHandler else { return }
+        
     DispatchQueue.main.async {
-        guard let appDelegate = UIApplication.shared.delegate as? AppDelegate,
-            let backgroundCompletionHandler =
-        	// 上面保存的completionHandler
-            appDelegate.backgroundCompletionHandler else {
-                return
-        }
+        // 上面保存的completionHandler
         backgroundCompletionHandler()
     }
 }
@@ -268,7 +264,6 @@ func urlSessionDidFinishEvents(forBackgroundURLSession session: URLSession) {
 支持后台下载的downloadTask失败的时候，在`urlSession(_:task:didCompleteWithError:)`方法里面的`(error as NSError).userInfo`可能会出现一个key为`NSURLErrorBackgroundTaskCancelledReasonKey`的键值对，由此可以获得只有后台下载任务失败时才有相关的信息，具体请看：[Background Task Cancellation](https://developer.apple.com/documentation/foundation/urlsession/1508626-background_task_cancellation)
 
 ```swift
-// 或者是在session delegate 的 urlSession(_:task:didCompleteWithError:) 方法里面获取
 func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
     if let error = error {
         let backgroundTaskCancelledReason = (error as NSError).userInfo[NSURLErrorBackgroundTaskCancelledReasonKey] as? Int
